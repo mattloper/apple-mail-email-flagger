@@ -1,0 +1,2 @@
+include email_flagger/templates/*.applescript
+include README.md

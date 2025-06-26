@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# E-mail test files
+*.eml 
