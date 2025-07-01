@@ -290,10 +290,10 @@ def main():
         entries = []
         with log_path.open() as f:
             for line in f:
-                if line.startswith("ENTRY "):
+                if " ENTRY " in line:
                     try:
                         import json
-                        payload = json.loads(line[len("ENTRY "):])
+                        payload = json.loads(line.split(" ENTRY ",1)[1])
                         entries.append(payload)
                     except Exception:
                         continue
