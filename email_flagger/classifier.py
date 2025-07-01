@@ -209,13 +209,6 @@ def extract_snippet(msg_path: Path, config: dict) -> tuple[str, str]:
 
 def classify_message_file(path_str: str, config: dict, return_score: bool = False) -> str:
     """Orchestrates the classification of a single email file."""
-    # Truncate previous run's log so this file only contains entries from the
-    # current invocation.
-    try:
-        LOG_FILE.open("w").close()
-    except Exception:
-        pass
-
     log_message("-" * 40)
     log_message(f"Processing file: {path_str}")
     
@@ -284,6 +277,17 @@ def classify_message_file(path_str: str, config: dict, return_score: bool = Fals
         pass
 
     log_message(f"Final Classification: {classification}")
+
+    # Ring buffer: keep only the last 300 lines of the log file to avoid
+    # unbounded growth when the classifier is invoked once per message via
+    # AppleScript.
+    try:
+        MAX_LINES = 300
+        lines = LOG_FILE.read_text().splitlines()
+        if len(lines) > MAX_LINES:
+            LOG_FILE.write_text("\n".join(lines[-MAX_LINES:]) + "\n")
+    except Exception:
+        pass
 
     if return_score:
         return classification, score
