@@ -209,6 +209,13 @@ def extract_snippet(msg_path: Path, config: dict) -> tuple[str, str]:
 
 def classify_message_file(path_str: str, config: dict, return_score: bool = False) -> str:
     """Orchestrates the classification of a single email file."""
+    # Truncate previous run's log so this file only contains entries from the
+    # current invocation.
+    try:
+        LOG_FILE.open("w").close()
+    except Exception:
+        pass
+
     log_message("-" * 40)
     log_message(f"Processing file: {path_str}")
     

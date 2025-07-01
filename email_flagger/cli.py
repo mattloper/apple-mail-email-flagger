@@ -302,11 +302,14 @@ def main():
             print("No structured entries found in log.")
             sys.exit(0)
 
+        print("Care scores (most recent first):")
         for item in entries[-args.recent:][::-1]:
-            ts = item.get("ts", "")
             score = item.get("score")
+            cls = item.get("class")
             subj = item.get("subject", "")
-            print(f"{score:6.2f} | {subj}")
+            print(f"{score:6.2f} ({cls}) : {subj}")
+
+        print(f"\nFull log available at: {log_path}")
     else:
         parser.print_help()
 
