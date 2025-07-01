@@ -49,7 +49,8 @@ def load_config():
         "ollama": {
             "model": "llama3",
             "endpoint": "http://localhost:11434",
-            "timeout": 60
+            "timeout": 60,
+            "temperature": 0.0
         },
         "scoring": {
             "red_min": 80,
@@ -83,15 +84,28 @@ def build_personal_context(config):
     
     return context
 
-def query_ollama(prompt: str, config: dict) -> int:
-    """Return a 0–100 integer care score from Ollama (blocking)."""
+def query_ollama(prompt: str, config: dict) -> float:
+    """Return a 0–100 float care score from Ollama (blocking)."""
     ollama_config = config.get("ollama", {})
     model = ollama_config.get("model", "llama3")
     endpoint = ollama_config.get("endpoint", "http://localhost:11434")
     timeout = ollama_config.get("timeout", 60)
     
+    # Build options for the Ollama API. Start with any user-supplied dict under
+    # ``ollama.options`` and then allow top-level convenience keys such as
+    # ``temperature`` to override or populate it.
+    options = ollama_config.get("options", {}).copy()
+
+    # Convenience: a top-level ``temperature`` key is promoted into the options
+    # object so that users can simply write "temperature": 0.1 in their config
+    # without needing to nest it.
+    if "temperature" in ollama_config:
+        options["temperature"] = ollama_config["temperature"]
+
     url = f"{endpoint.rstrip('/')}/api/generate"
     payload = {"model": model, "prompt": prompt, "stream": False}
+    if options:
+        payload["options"] = options
 
     try:
         resp = requests.post(url, json=payload, timeout=timeout)
@@ -105,17 +119,18 @@ def query_ollama(prompt: str, config: dict) -> int:
         if "response" not in data:
             raise ValueError(f"malformed Ollama response: {data}")
         text = data.get("response", "").strip()
-        # Extract first valid integer 0-100.
-        match = re.search(r"\b([0-9]|[1-9][0-9]|100)\b", text)
+        # Require exactly two digits after the decimal point (e.g. 42.00).
+        float_pattern = r"\b(?:100\.00|[0-9]{1,2}\.\d{2})\b"
+        match = re.search(float_pattern, text)
         if not match:
-            raise ValueError(f"no valid integer (0-100) in LLM output: {text}")
-        score = int(match.group(1))
+            raise ValueError(f"no valid 0–100 number in LLM output: {text}")
+        score = float(match.group(0))
         return score
     except Exception as exc:
         print(f"ERROR: failed to parse Ollama response – {exc}", file=sys.stderr)
         return -1
 
-def get_classification_for_score(score: int, config: dict) -> str:
+def get_classification_for_score(score: float, config: dict) -> str:
     """Return a classification string for a given 0-100 score."""
     if score < 0:
         return "none"
@@ -192,7 +207,7 @@ def extract_snippet(msg_path: Path, config: dict) -> tuple[str, str]:
     extract = (subject + "\n" + body).strip()[:max_bytes]
     return sender, extract
 
-def classify_message_file(path_str: str, config: dict) -> str:
+def classify_message_file(path_str: str, config: dict, return_score: bool = False) -> str:
     """Orchestrates the classification of a single email file."""
     log_message("-" * 40)
     log_message(f"Processing file: {path_str}")
@@ -217,9 +232,10 @@ def classify_message_file(path_str: str, config: dict) -> str:
         "You are an e-mail triage assistant. Your task is to assign a 'care score' from 0-100 to incoming emails, representing how urgently the recipient needs to personally take action. "
         "Here is some context about the recipient's priorities:\n{personal_context}\n\n"
         "The message is from: {sender}\n\n"
-        "Based on the context above and the message content below, output a single integer\n"
-        "from 0 to 100. It indicates the probability that the recipient needs to take action\n"
-        "or respond. Do NOT output anything except the integer.\n\n"
+        "Based on the context above and the message content below, output a single decimal\n"
+        "number from 0.00 to 100.00 with *exactly two digits* after the decimal point.\n"
+        "It indicates the probability that the recipient needs to take action\n"
+        "or respond. Do NOT output anything except the number.\n\n"
         "----- BEGIN MESSAGE -----\n{extract}\n----- END MESSAGE -----\n"
     )
     
@@ -234,7 +250,11 @@ def classify_message_file(path_str: str, config: dict) -> str:
     
     classification = get_classification_for_score(score, config)
     log_message(f"Final Classification: {classification}")
-    return classification
+
+    if return_score:
+        return classification, score
+    else:
+        return classification
 
 def main() -> None:
     """Main entry point: read path, classify, print result."""
