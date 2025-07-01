@@ -229,14 +229,25 @@ def classify_message_file(path_str: str, config: dict, return_score: bool = Fals
     personal_context = build_personal_context(config)
     
     prompt_template = (
-        "You are an e-mail triage assistant. Your task is to assign a 'care score' from 0-100 to incoming emails, representing how urgently the recipient needs to personally take action. "
-        "Here is some context about the recipient's priorities:\n{personal_context}\n\n"
-        "The message is from: {sender}\n\n"
-        "Based on the context above and the message content below, output a single decimal\n"
-        "number from 0.00 to 100.00 with *exactly two digits* after the decimal point.\n"
-        "It indicates the probability that the recipient needs to take action\n"
-        "or respond. Do NOT output anything except the number.\n\n"
-        "----- BEGIN MESSAGE -----\n{extract}\n----- END MESSAGE -----\n"
+        "### ROLE\n"
+        "You are an **e-mail triage assistant**. Your job is to decide how urgently the recipient needs to personally handle an incoming message.\n\n"
+
+        "### RECIPIENT PROFILE\n"
+        "{personal_context}\n\n"
+
+        "### INCOMING MESSAGE METADATA\n"
+        "From: {sender}\n\n"
+
+        "### INCOMING MESSAGE CONTENT\n"
+        "----- BEGIN MESSAGE -----\n{extract}\n----- END MESSAGE -----\n\n"
+
+        "### TASK\n"
+        "Analyse the message *in context* and produce a **care score** between 0.00 and 100.00 inclusive.\n"
+        "A higher score means the recipient must act quickly; a lower score means it can wait or be ignored.\n\n"
+
+        "### OUTPUT FORMAT (MUST-FOLLOW)\n"
+        "Return ONLY the score as a decimal with exactly two digits after the point, e.g.\n"
+        "`42.00`\n"
     )
     
     prompt = prompt_template.format(
@@ -249,6 +260,22 @@ def classify_message_file(path_str: str, config: dict, return_score: bool = Fals
     log_message(f"Ollama Score: {score}")
     
     classification = get_classification_for_score(score, config)
+
+    # Structured log entry for easy post-processing
+    try:
+        import json, datetime
+        subject_preview = snippet.split("\n", 1)[0][:200]
+        log_payload = {
+            "ts": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "score": score,
+            "class": classification,
+            "subject": subject_preview,
+            "from": sender,
+        }
+        log_message("ENTRY " + json.dumps(log_payload, ensure_ascii=False))
+    except Exception:
+        pass
+
     log_message(f"Final Classification: {classification}")
 
     if return_score:

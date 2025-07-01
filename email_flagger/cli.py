@@ -268,6 +268,8 @@ def main():
                        help='Classify a single email file')
     parser.add_argument('--test', action='store_true',
                        help='Test classification with a sample email')
+    parser.add_argument('--recent', metavar='N', type=int,
+                       help='Show the last N classification scores from the log')
     
     args = parser.parse_args()
     
@@ -277,6 +279,34 @@ def main():
         classify_file(args.classify)
     elif args.test:
         test_classification()
+    elif args.recent:
+        from datetime import datetime
+        # Ensure log exists
+        log_path = CONFIG_DIR / "classifier.log"
+        if not log_path.exists():
+            print("No log file found yet.")
+            sys.exit(0)
+
+        entries = []
+        with log_path.open() as f:
+            for line in f:
+                if line.startswith("ENTRY "):
+                    try:
+                        import json
+                        payload = json.loads(line[len("ENTRY "):])
+                        entries.append(payload)
+                    except Exception:
+                        continue
+
+        if not entries:
+            print("No structured entries found in log.")
+            sys.exit(0)
+
+        for item in entries[-args.recent:][::-1]:
+            ts = item.get("ts", "")
+            score = item.get("score")
+            subj = item.get("subject", "")
+            print(f"{score:6.2f} | {subj}")
     else:
         parser.print_help()
 
