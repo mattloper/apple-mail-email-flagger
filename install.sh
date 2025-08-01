@@ -208,6 +208,52 @@ else:
     print(f"Added smart alias to {shell_config}")
 EOF
 
+# Check for Ollama and model
+echo ""
+echo "🤖 Checking Ollama setup..."
+if command -v ollama >/dev/null 2>&1; then
+    echo "   ✅ Ollama found"
+    
+    # Check if Ollama is running
+    if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+        echo "   ✅ Ollama is running"
+        
+        # Check if llama3 model is available
+        if ollama list 2>/dev/null | grep -q "llama3"; then
+            echo "   ✅ llama3 model found"
+        else
+            echo "   ⚠️  llama3 model not found"
+            echo "   📥 Pulling llama3 model (this may take a few minutes)..."
+            if ollama pull llama3 >/dev/null 2>&1; then
+                echo "   ✅ llama3 model downloaded successfully"
+            else
+                echo "   ❌ Failed to download llama3 model"
+                echo "   💡 Run manually: ollama pull llama3"
+                echo ""
+                echo "ERROR: Email Flagger requires Ollama with llama3 model to function."
+                echo "Please install and configure Ollama first, then run this installer again."
+                exit 1
+            fi
+        fi
+    else
+        echo "   ❌ Ollama not running"
+        echo "   🚀 Start with: brew services start ollama"
+        echo ""
+        echo "ERROR: Email Flagger requires Ollama to be running."
+        echo "Please start Ollama first, then run this installer again."
+        exit 1
+    fi
+else
+    echo "   ❌ Ollama not found"
+    echo "   📥 Install with: brew install ollama"
+    echo "   🚀 Then start with: brew services start ollama"
+    echo "   📥 Then pull model: ollama pull llama3"
+    echo ""
+    echo "ERROR: Email Flagger requires Ollama to be installed and running."
+    echo "Please install Ollama first, then run this installer again."
+    exit 1
+fi
+
 echo ""
 echo "Installation complete!"
 echo "Created ~/.email-flagger directory" 

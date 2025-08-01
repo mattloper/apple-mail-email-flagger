@@ -24,7 +24,8 @@ The installer will:
 2. Install the `email_flagger` Python package inside it
 3. Add smart aliases (`email-flagger`, `email-flagger-classify`) to your shell
 4. Copy `classifier_hook.applescript` into `~/Library/Application Scripts/com.apple.mail/`
-5. Print instructions for adding the Apple Mail rule
+5. Check for Ollama and automatically pull the `llama3` model if needed
+6. Print instructions for adding the Apple Mail rule
 
 Restart your terminal afterwards so the new aliases are picked up, then run:
 
@@ -43,8 +44,10 @@ This opens your config file in TextEdit and repeats the Mail-rule instructions.
 ```bash
 # install ollama via Homebrew
 brew install ollama
-# start the API (pulls the model on first run)
-ollama serve &
+# start the API and enable it to start on reboot
+brew services start ollama
+# pull the default model (required for classification)
+ollama pull llama3
 ```
 
 ## Usage
@@ -112,7 +115,8 @@ This removes the virtual-environment, aliases, AppleScript, and logs while prese
 ## Troubleshooting
 
 * `email-flagger-classify: command not found`  → restart your terminal or run `source ~/.zshrc`
-* "Ollama not running" errors  → `ollama serve`
+* "Ollama not running" errors  → `brew services start ollama`
+* "No model found" errors  → `ollama pull llama3`
 * Email not coloured  → verify the Mail rule points to `classifier_hook.applescript`
 * Logs for deep-dive debugging: `~/.email-flagger/classifier.log` and `~/.email-flagger/email_flagger_log.txt`
 
