@@ -27,8 +27,8 @@ def get_config_template():
             "timeout": 60
         },
         "scoring": {
-            "red_min": 80,
-            "blue_min": 60
+            "read_threshold": 80,
+            "glance_threshold": 60
         },
         "max_bytes": 2048
     }

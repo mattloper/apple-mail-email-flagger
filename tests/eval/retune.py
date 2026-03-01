@@ -3,7 +3,7 @@
 
 Usage:
     python3 tests/eval/retune.py                          # baseline with current prompt
-    python3 tests/eval/retune.py --red-min 70 --blue-min 40
+    python3 tests/eval/retune.py --read-threshold 70 --glance-threshold 40
     python3 tests/eval/retune.py --model llama3
     python3 tests/eval/retune.py --prompt-file prompt.txt
     python3 tests/eval/retune.py --categorical --prompt-file prompt_cat.txt
@@ -27,6 +27,7 @@ from email_flagger.classifier import (
     PROMPT_TEMPLATE,
     build_personal_context,
     get_classification_for_score,
+    load_calibration,
     load_config,
     query_ollama,
 )
@@ -72,15 +73,16 @@ def parse_categorical(text: str) -> str:
 def run_eval(
     prompt_template: str,
     config: dict,
-    red_min: float,
-    blue_min: float,
+    read_threshold: float,
+    glance_threshold: float,
     entries: list[dict],
     labels: dict[str, str],
     categorical: bool = False,
 ) -> dict:
     """Re-classify all labeled entries and return metrics."""
     personal_context = build_personal_context(config)
-    scoring = {"red_min": red_min, "blue_min": blue_min}
+    calibration = load_calibration()
+    scoring = {"read_threshold": read_threshold, "glance_threshold": glance_threshold}
 
     results = []
     for i, entry in enumerate(entries):
@@ -97,6 +99,7 @@ def run_eval(
             extract=snippet,
             personal_context=personal_context,
             sender=sender,
+            calibration=calibration,
         )
 
         if categorical:
@@ -181,8 +184,8 @@ def print_report(metrics: dict):
 def main():
     parser = argparse.ArgumentParser(description="Re-classify labeled emails")
     parser.add_argument("--model", help="Override Ollama model")
-    parser.add_argument("--red-min", type=float, help="Red threshold")
-    parser.add_argument("--blue-min", type=float, help="Blue threshold")
+    parser.add_argument("--read-threshold", type=float, help="Read threshold")
+    parser.add_argument("--glance-threshold", type=float, help="Glance threshold")
     parser.add_argument("--prompt-file", help="Path to alternative prompt template")
     parser.add_argument(
         "--json-out", help="Write full results to JSON file"
@@ -197,9 +200,9 @@ def main():
     if args.model:
         config["ollama"]["model"] = args.model
 
-    red_min = args.red_min if args.red_min is not None else config["scoring"]["red_min"]
-    blue_min = (
-        args.blue_min if args.blue_min is not None else config["scoring"]["blue_min"]
+    read_threshold = args.read_threshold if args.read_threshold is not None else config["scoring"]["read_threshold"]
+    glance_threshold = (
+        args.glance_threshold if args.glance_threshold is not None else config["scoring"]["glance_threshold"]
     )
 
     if args.prompt_file:
@@ -212,12 +215,12 @@ def main():
     n_labeled = sum(1 for e in entries if e.get("ts") in labels)
 
     model_name = config["ollama"]["model"]
-    print(f"Model: {model_name}  |  Thresholds: red>={red_min} blue>={blue_min}")
+    print(f"Model: {model_name}  |  Thresholds: read>={read_threshold} glance>={glance_threshold}")
     print(f"Re-classifying {n_labeled} labeled emails...\n")
 
     t0 = time.time()
     metrics = run_eval(
-        prompt_template, config, red_min, blue_min, entries, labels,
+        prompt_template, config, read_threshold, glance_threshold, entries, labels,
         categorical=args.categorical,
     )
     elapsed = time.time() - t0

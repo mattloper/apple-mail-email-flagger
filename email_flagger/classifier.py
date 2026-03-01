@@ -53,8 +53,8 @@ def load_config():
             "temperature": 0.0
         },
         "scoring": {
-            "red_min": 80,
-            "blue_min": 60
+            "read_threshold": 80,
+            "glance_threshold": 60
         },
         "max_bytes": 2048
     }
@@ -136,12 +136,12 @@ def get_classification_for_score(score: float, config: dict) -> str:
         return "ignore"
 
     scoring = config.get("scoring", {})
-    red_min = scoring.get("red_min", 80)
-    blue_min = scoring.get("blue_min", 60)
+    read_threshold = scoring.get("read_threshold", 80)
+    glance_threshold = scoring.get("glance_threshold", 60)
 
-    if score >= red_min:
+    if score >= read_threshold:
         return "read"
-    elif score >= blue_min:
+    elif score >= glance_threshold:
         return "glance"
     else:
         return "ignore"
@@ -223,6 +223,40 @@ def extract_snippet(msg_path: Path, config: dict) -> tuple[str, str]:
     extract = (subject + "\n" + body).strip()[:max_bytes]
     return sender, extract
 
+CALIBRATION_FILE = CONFIG_DIR / "calibration.txt"
+
+# Scores used when converting category names to numeric values for the LLM.
+CATEGORY_SCORES = {"read": 78.00, "glance": 55.00, "ignore": 30.00}
+
+
+def load_calibration() -> str:
+    """Load calibration examples from ~/.email-flagger/calibration.txt.
+
+    Each non-blank, non-comment line should look like:
+        "Subject line" -> category (reason)
+    where category is read, glance, or ignore.
+
+    Returns the formatted calibration section for the prompt.
+    """
+    if not CALIBRATION_FILE.exists():
+        return ""
+
+    lines = []
+    for raw in CALIBRATION_FILE.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Parse: "Subject" -> category (reason)
+        m = re.match(r'^"(.+?)"\s*->\s*(read|glance|ignore)\s*\((.+?)\)\s*$', line)
+        if not m:
+            continue
+        subject, category, reason = m.group(1), m.group(2), m.group(3)
+        score = CATEGORY_SCORES[category]
+        lines.append(f'- "{subject}" -> {score:.2f} ({reason})\n')
+
+    return "".join(lines)
+
+
 PROMPT_TEMPLATE = (
     "### ROLE\n"
     "You are an e-mail triage assistant. Score how much the recipient would want to know about this message.\n\n"
@@ -237,46 +271,33 @@ PROMPT_TEMPLATE = (
     "50-69   Worth a glance: child's school district emails and class updates (gradebook, weekly summary, "
     "school closure notice), delivery/shipping notification, account login or signup confirmation, calendar invite or "
     "meeting update, personal correspondence or art from a friend, invoice/receipt/refund for a software service, "
-    "GitHub PR notification from work repo, tax document, new account welcome email, after-visit medical summary, "
-    "labor negotiation update from school district\n"
-    "30-49   Probably skip: daily digest or summary email, automated billing/payment confirmation (carrier, bank), "
+    "GitHub PR notification from work repo, tax document (1099, W-2), new account welcome email, after-visit medical summary, "
+    "labor negotiation update from school district, payment confirmation for a software or cloud service, "
+    "someone reaching out to connect personally\n"
+    "30-49   Probably skip: daily digest or summary email, automated billing/payment confirmation (carrier, bank, utility), "
     "news article or headline, product update announcement, political newsletter, social media notification, "
-    "FICO/credit score alert, dry cleaner or retail receipt, SaaS product update\n"
+    "FICO/credit score alert, dry cleaner or retail receipt, SaaS product update, "
+    "school newsletter that is purely informational with no action required\n"
     " 0-29   Noise: marketing spam, unsolicited ad, mass mailing, coupon/sale offer, recruiter spam, LinkedIn suggestion\n\n"
 
     "Key distinctions:\n"
     "- Child's school emails are \"glance\" (50-65) even if the subject says \"important\" or \"learning resources.\" "
     "Only score them 70+ if they explicitly ask the parent to sign up, attend, or respond.\n"
     "- Emails from the school district about closures, labor negotiations, or learning resources are informational updates -> 55.\n"
-    "- Personal correspondence (including art-related emails from friends) -> 55.\n"
-    "- After-visit medical summaries -> 55 (informational, glance).\n\n"
+    "- Personal correspondence (including art-related emails from friends) -> 55. "
+    "This includes casual emails with a friend's name in the subject.\n"
+    "- After-visit medical summaries -> 55 (informational, glance).\n"
+    "- Tax documents (1099, W-2, tax return document) -> 55 (glance).\n"
+    "- Payment confirmation for a software/cloud service (e.g. Docker, Cursor, Intuit) -> 50 (glance, not skip).\n"
+    '- "I want to connect" or "still waiting for your response" from a real person -> 52 (personal, glance).\n'
+    "- New account welcome/signup email -> 52 (glance).\n"
+    '- School newsletters (e.g. "Eagles\' Nest Newsletter") -> 52 (glance, parent wants to stay informed).\n'
+    "- Carrier/utility billing (e.g. AT&T payment processed) -> 35 (skip).\n"
+    '- Any "Re:" reply in a support case thread -> 75 (active case, read).\n'
+    '- Any "Re: Friend, ..." email is personal correspondence -> 55 (glance), even if the subject sounds abstract.\n\n'
 
     "### CALIBRATION\n"
-    '- "Child - AP and Honors Courses Info Sessions and Registration" -> 78.00 (requires parent to register)\n'
-    '- "Re: Case Created: Support Ticket" -> 75.00 (active support case)\n'
-    '- "Employee Self-Service Reset Password" -> 72.00 (password reset, needs action)\n'
-    '- "Re: [WorkOrg/project] Add Feature Logic" -> 58.00 (work GitHub PR, glance)\n'
-    '- "Learning Resources: All Schools Closed on Monday" -> 55.00 (school closure info, glance)\n'
-    '- "Important update regarding labor negotiations; schools..." -> 55.00 (school district update, glance)\n'
-    '- "New After Visit Summary Available" -> 55.00 (medical summary, glance)\n'
-    '- "Weekly summary for Child" -> 55.00 (school weekly summary, glance)\n'
-    '- "Re: Friend, Art Subject" -> 55.00 (personal correspondence, glance)\n'
-    '- "School District Family Announcement Bulletin" -> 55.00 (school district news, glance)\n'
-    '- "USPS Expected Delivery on Monday" -> 55.00 (shipping, glance)\n'
-    '- "Hey, I\'m still waiting for your response" -> 52.00 (personal message, glance)\n'
-    '- "New login to your account" -> 52.00 (account alert, glance)\n'
-    '- "Welcome to NewService!" -> 52.00 (new signup, glance)\n'
-    '- "Updated invitation: Meeting @ Wed" -> 52.00 (calendar invite, glance)\n'
-    '- "We received your subscription payment!" -> 50.00 (software invoice, glance)\n'
-    '- "Your Daily Digest for Mon is ready to view" -> 35.00 (daily digest, skip)\n'
-    '- "Carrier payment processed" -> 35.00 (carrier billing, skip)\n'
-    '- "Upcoming writing prompts" -> 35.00 (recurring prompt, skip)\n'
-    '- "Your bill is projected to be $465" -> 35.00 (billing projection, skip)\n'
-    '- "New in ResearchTool: 200 paper Reports" -> 32.00 (research tool update, skip)\n'
-    '- "[Product Update] Automatic enablement of new feature" -> 32.00 (product update, skip)\n'
-    '- "Top story: Breaking news headline" -> 30.00 (news article, skip)\n'
-    '- "Your receipt from Local Store" -> 30.00 (retail receipt, skip)\n'
-    '- "50% off all shoes this weekend!" -> 5.00 (spam)\n\n'
+    "{calibration}"
 
     "### MESSAGE\n"
     "From: {sender}\n"
@@ -295,10 +316,12 @@ def classify_content(sender: str, snippet: str, config: dict) -> tuple[str, floa
     benchmarking.
     """
     personal_context = build_personal_context(config)
+    calibration = load_calibration()
     prompt = PROMPT_TEMPLATE.format(
         extract=snippet,
         personal_context=personal_context,
         sender=sender,
+        calibration=calibration,
     )
     score = query_ollama(prompt, config)
     classification = get_classification_for_score(score, config)

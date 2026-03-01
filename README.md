@@ -92,11 +92,23 @@ Key options:
 * `name` – how the LLM should refer to you
 * `llm_instructions` – free-form guidance (e.g. "Always prioritize emails from my boss…") 
 * `ollama.model`, `ollama.endpoint`, `ollama.timeout`
-* `scoring.red_min` – minimum care-score for "read" (default 80)
-* `scoring.blue_min` – minimum care-score for "glance" (default 60)
+* `scoring.read_threshold` – minimum care-score for "read" (default 80)
+* `scoring.glance_threshold` – minimum care-score for "glance" (default 60)
 * `max_bytes` – how many bytes of the email to send to the model
 
 Changes are picked up the next time a message is processed.
+
+## Calibration
+
+You can teach the model what kinds of emails matter to you by editing `~/.email-flagger/calibration.txt`. Each line is an example:
+
+```
+"Email from my boss about deadline" -> read (direct request, needs action)
+"Weekly school summary" -> glance (stay informed about kid's school)
+"Your Daily Digest" -> ignore (automated summary)
+```
+
+Categories are `read`, `glance`, and `ignore`. The parenthetical explains why — this helps the model generalize to similar emails. A default set of examples is created on install; add your own for best results.
 
 ## How it works
 
