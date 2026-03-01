@@ -251,7 +251,7 @@ Sarah (your manager)
         Path(temp_path).unlink()
         
         print(f"🧪 Test email classification: {classification}")
-        if classification in ['red', 'blue', 'none']:
+        if classification in ['read', 'glance', 'ignore']:
             print("✅ Classification working correctly")
         else:
             print("⚠️  Unexpected classification result")
@@ -495,7 +495,7 @@ def accuracy_command():
     # Per-bucket breakdown
     print(f"  {'Bucket':<8} {'Correct':>8} {'Total':>7} {'Accuracy':>10}")
     print(f"  {'-'*8} {'-'*8} {'-'*7} {'-'*10}")
-    for bucket in ("red", "blue", "none"):
+    for bucket in ("read", "glance", "ignore"):
         b = metrics["buckets"].get(bucket, {"correct": 0, "total": 0})
         pct = f"{100*b['correct']/b['total']:.0f}%" if b["total"] else "n/a"
         print(f"  {bucket:<8} {b['correct']:>8} {b['total']:>7} {pct:>10}")

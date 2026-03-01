@@ -133,18 +133,18 @@ def query_ollama(prompt: str, config: dict) -> float:
 def get_classification_for_score(score: float, config: dict) -> str:
     """Return a classification string for a given 0-100 score."""
     if score < 0:
-        return "none"
-    
+        return "ignore"
+
     scoring = config.get("scoring", {})
     red_min = scoring.get("red_min", 80)
     blue_min = scoring.get("blue_min", 60)
-    
+
     if score >= red_min:
-        return "red"
+        return "read"
     elif score >= blue_min:
-        return "blue"
+        return "glance"
     else:
-        return "none"
+        return "ignore"
 
 def clean_html(html: str) -> str:
     """Strip HTML to plain text using BeautifulSoup.
@@ -313,12 +313,12 @@ def classify_message_file(path_str: str, config: dict, return_score: bool = Fals
     path = Path(path_str.strip())
     if not path.exists():
         log_message("Error: File does not exist.")
-        return "none"
+        return "ignore"
 
     sender, snippet = extract_snippet(path, config)
     if not snippet:
         log_message("Error: Could not extract snippet.")
-        return "none"
+        return "ignore"
 
     log_message(f"Extracted Sender: {sender}")
     log_message(f"Extracted Snippet:\n---\n{snippet}\n---")
@@ -367,8 +367,8 @@ def main() -> None:
     """Main entry point: read path, classify, print result."""
     if len(sys.argv) < 2:
         log_message("Error: No file path provided to script.")
-        print("none")
-        sys.exit(0)  # Don't fail, just return "none"
+        print("ignore")
+        sys.exit(0)  # Don't fail, just return "ignore"
 
     # Load configuration (always succeeds with defaults)
     config = load_config()

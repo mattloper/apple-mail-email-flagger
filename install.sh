@@ -99,12 +99,12 @@ using terms from application "Mail"
 					my log_to_file("Python script result: [" & resultClassification & "]", logFile)
 					
 					-- Set the flag/color based on the Python script's output.
-					if resultClassification is "red" then
+					if resultClassification is "read" then
 						set background color of eachMessage to red
-					else if resultClassification is "blue" then
-						set background color of eachMessage to blue
+					else if resultClassification is "ignore" then
+						set background color of eachMessage to gray
 					else
-						-- For "none" or any other result, clear the background color.
+						-- "glance" or any other result: no background color.
 						set background color of eachMessage to none
 					end if
 					

@@ -4,7 +4,7 @@ AI-powered email prioritization for Apple Mail. Runs 100 % locally—no cloud ev
 
 ## Features
 
-• Flags emails with **red** (urgent) or **blue** (important) background colors automatically.
+• Flags emails: **red** background (read now), no color (worth a glance), **gray** background (ignore).
 • Uses an open-source LLM via [Ollama](https://ollama.ai) (default: `llama3`).
 • Fully configurable priorities, thresholds, and model settings.
 • One-line install & uninstall scripts, no admin rights required.
@@ -79,6 +79,8 @@ email-flagger --import-mail 100      # import last N emails from Apple Mail
 email-flagger --review               # label emails as ignore/glance/read
 email-flagger --accuracy             # measure model accuracy vs your labels
 email-flagger --recent 10            # show last N classification scores
+email-flagger --deploy               # reinstall package after code changes
+email-flagger --version              # show build timestamp and source dir
 ```
 
 ## Configuration
@@ -90,8 +92,8 @@ Key options:
 * `name` – how the LLM should refer to you
 * `llm_instructions` – free-form guidance (e.g. "Always prioritize emails from my boss…") 
 * `ollama.model`, `ollama.endpoint`, `ollama.timeout`
-* `scoring.red_min` – minimum care-score for a red flag (default 80)
-* `scoring.blue_min` – minimum care-score for a blue flag (default 60)
+* `scoring.red_min` – minimum care-score for "read" (default 80)
+* `scoring.blue_min` – minimum care-score for "glance" (default 60)
 * `max_bytes` – how many bytes of the email to send to the model
 
 Changes are picked up the next time a message is processed.
@@ -103,8 +105,8 @@ Changes are picked up the next time a message is processed.
    • extracts sender, subject, and body (plain-text or HTML)  
    • builds a prompt using your config  
    • asks Ollama for a "care score" between 0 – 100  
-   • maps that score to a color (`red`, `blue`, or none)
-3. The AppleScript applies the matching background color in Mail.
+   • maps that score to a category (`read`, `glance`, or `ignore`)
+3. The AppleScript applies the matching background color in Mail (red, none, or gray).
 
 Adjust thresholds in `config.json` to change the sensitivity.
 
@@ -113,9 +115,8 @@ Adjust thresholds in `config.json` to change the sensitivity.
 After editing the Python source, you must reinstall the package for Apple Mail to pick up changes:
 
 ```bash
-./install.sh          # full reinstall (safe to re-run)
-# — or, just the pip step —
-~/.email-flagger/venv/bin/pip install /path/to/email-flagger
+email-flagger --deploy    # quickest way (reads source path from build.json)
+./install.sh              # full reinstall (safe to re-run)
 ```
 
 **Do not use `pip install -e` (editable mode).** Apple Mail runs scripts inside a sandbox that cannot access paths outside `~/.email-flagger`. An editable install symlinks back to your source directory, which the sandbox blocks — you'll see `No module named email_flagger` in `~/.email-flagger/email_flagger_log.txt`.
@@ -133,7 +134,8 @@ This removes the virtual-environment, aliases, AppleScript, and logs while prese
 * `email-flagger-classify: command not found`  → restart your terminal or run `source ~/.zshrc`
 * "Ollama not running" errors  → `brew services start ollama`
 * "No model found" errors  → `ollama pull llama3`
-* Email not coloured  → verify the Mail rule points to `classifier_hook.applescript`
+* Emails not flagged  → verify the Mail rule points to `classifier_hook.applescript`
+* Code changes not taking effect → run `email-flagger --deploy` to reinstall
 * Logs for deep-dive debugging: `~/.email-flagger/classifier.log` and `~/.email-flagger/email_flagger_log.txt`
 
 ## License

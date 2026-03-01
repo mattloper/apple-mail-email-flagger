@@ -20,8 +20,8 @@ CONFIG_DIR = Path.home() / ".email-flagger"
 DATASET_FILE = CONFIG_DIR / "dataset.jsonl"
 LABELS_FILE = CONFIG_DIR / "labels.json"
 
-# Human feedback categories → model bucket they map to
-LABEL_TO_BUCKET = {"ignore": "none", "glance": "blue", "read": "red"}
+# Human feedback categories match model output directly
+LABEL_TO_BUCKET = {"ignore": "ignore", "glance": "glance", "read": "read"}
 
 
 # ── dataset ──────────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ def compute_accuracy(entries: list[dict] | None = None,
         if ts in labels:
             expected = LABEL_TO_BUCKET[labels[ts]]
             labeled.append({
-                "class": e.get("class", "none"),
+                "class": e.get("class", "ignore"),
                 "score": e.get("score", -1),
                 "label": labels[ts],
                 "expected": expected,
@@ -147,7 +147,7 @@ def compute_accuracy(entries: list[dict] | None = None,
 
     correct = sum(1 for r in labeled if r["class"] == r["expected"])
     buckets = {}
-    for bucket in ("red", "blue", "none"):
+    for bucket in ("read", "glance", "ignore"):
         total = sum(1 for r in labeled if r["expected"] == bucket)
         right = sum(1 for r in labeled if r["expected"] == bucket
                     and r["class"] == bucket)

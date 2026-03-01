@@ -54,19 +54,19 @@ def query_ollama_raw(prompt: str, config: dict) -> str:
         return resp.json().get("response", "").strip()
     except Exception as exc:
         print(f"  (Ollama error: {type(exc).__name__})", flush=True)
-        return "NONE"
+        return "IGNORE"
 
 
-CAT_TO_BUCKET = {"read": "red", "glance": "blue", "ignore": "none"}
+CAT_TO_BUCKET = {"read": "read", "glance": "glance", "ignore": "ignore"}
 
 
 def parse_categorical(text: str) -> str:
     """Parse READ/GLANCE/IGNORE from model output, return bucket name."""
     t = text.upper().strip()
-    for cat, bucket in [("READ", "red"), ("GLANCE", "blue"), ("IGNORE", "none")]:
+    for cat, bucket in [("READ", "read"), ("GLANCE", "glance"), ("IGNORE", "ignore")]:
         if cat in t:
             return bucket
-    return "none"
+    return "ignore"
 
 
 def run_eval(
@@ -136,7 +136,7 @@ def run_eval(
 
     correct = sum(1 for r in results if r["class"] == r["expected"])
     buckets = {}
-    for bucket in ("red", "blue", "none"):
+    for bucket in ("read", "glance", "ignore"):
         total = sum(1 for r in results if r["expected"] == bucket)
         right = sum(
             1 for r in results if r["expected"] == bucket and r["class"] == bucket
@@ -163,7 +163,7 @@ def print_report(metrics: dict):
 
     print(f"  {'Bucket':<8} {'Correct':>8} {'Total':>7} {'Accuracy':>10}")
     print(f"  {'-'*8} {'-'*8} {'-'*7} {'-'*10}")
-    for bucket in ("red", "blue", "none"):
+    for bucket in ("read", "glance", "ignore"):
         b = metrics["buckets"].get(bucket, {"correct": 0, "total": 0})
         pct = f"{100*b['correct']/b['total']:.0f}%" if b["total"] else "n/a"
         print(f"  {bucket:<8} {b['correct']:>8} {b['total']:>7} {pct:>10}")
