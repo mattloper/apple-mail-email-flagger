@@ -259,28 +259,303 @@ Sarah (your manager)
     except Exception as e:
         print(f"❌ Test failed: {e}")
 
+IMPORT_APPLESCRIPT = '''\
+tell application "Mail"
+    set output to ""
+    repeat with i from 1 to {n}
+        try
+            set m to message i of inbox
+            set tmpPath to "/tmp/email_import_" & i & ".eml"
+            set msgSource to source of m
+            do shell script "echo " & quoted form of msgSource & " > " & quoted form of tmpPath
+            set output to output & tmpPath & linefeed
+        on error
+            -- skip emails that can't be exported
+        end try
+    end repeat
+    return output
+end tell
+'''
+
+
+def import_mail_command(count):
+    """Pull the last N emails from Apple Mail, classify each, save to dataset."""
+    from email_flagger.classifier import (
+        classify_content, extract_snippet, load_config,
+    )
+    from email_flagger.dataset import append_entry, existing_hashes, _snippet_hash
+
+    print(f"Exporting last {count} emails from Apple Mail...")
+    script = IMPORT_APPLESCRIPT.format(n=count)
+    try:
+        # ~1-2s per email for AppleScript export; be generous
+        timeout = max(300, count * 3)
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if result.returncode != 0:
+            print(f"AppleScript error: {result.stderr.strip()}")
+            return
+    except subprocess.TimeoutExpired:
+        print("Timed out waiting for Mail. Is Mail running?")
+        return
+
+    paths = [p.strip() for p in result.stdout.strip().splitlines() if p.strip()]
+    if not paths:
+        print("No emails exported. Is Mail running with messages in inbox?")
+        return
+
+    config = load_config()
+    known = existing_hashes()
+    added, skipped = 0, 0
+
+    print(f"Exported {len(paths)} emails. Classifying new ones...\n")
+    for i, path in enumerate(paths, 1):
+        p = Path(path)
+        if not p.exists():
+            continue
+
+        sender, snippet = extract_snippet(p, config)
+        if not snippet:
+            continue
+
+        # Skip if already in dataset
+        if _snippet_hash(sender, snippet) in known:
+            subj = snippet.split("\n", 1)[0][:60]
+            print(f"  [{i}/{len(paths)}] {subj}  (already in dataset)")
+            skipped += 1
+            try:
+                p.unlink()
+            except Exception:
+                pass
+            continue
+
+        subj = snippet.split("\n", 1)[0][:60]
+        print(f"  [{i}/{len(paths)}] {subj}...", end=" ", flush=True)
+        classification, score = classify_content(sender, snippet, config)
+        print(f"score={score:.0f} ({classification})")
+
+        append_entry(sender, snippet, score, classification, _known=known)
+        added += 1
+
+        try:
+            p.unlink()
+        except Exception:
+            pass
+
+    print(f"\nDone. {added} new, {skipped} already in dataset.")
+    if added:
+        print("Run: email-flagger --review")
+
+
+def review_command(count):
+    """Review recent classifications and label them."""
+    from email_flagger.dataset import load_entries, load_labels, save_labels
+
+    entries = load_entries()
+    if not entries:
+        print("No emails in dataset yet. Classifications are saved automatically.")
+        return
+
+    labels = load_labels()
+    unreviewed = [e for e in entries if e["ts"] not in labels]
+
+    if not unreviewed:
+        print(f"All {len(entries)} emails have been reviewed.")
+        print("Run --accuracy to see how well the model matches your preferences.")
+        return
+
+    # Show the most recent N unreviewed
+    to_review = unreviewed[-count:]
+    print(f"{len(unreviewed)} unreviewed emails. Showing {len(to_review)}.\n")
+    print("For each email, choose:")
+    print("  [i]gnore  = don't care about this email")
+    print("  [g]lance  = want to see subject/sender but don't need to open it")
+    print("  [r]ead    = need to actually open and read it")
+    print("  [s]kip    = skip this one for now")
+    print("  [q]uit    = stop reviewing\n")
+
+    reviewed = 0
+    for entry in to_review:
+        score = entry.get("score", -1)
+        cls = entry.get("class", "?")
+        subj = entry.get("subject", "(no subject)")
+        sender = entry.get("from", "(unknown)")
+        ts = entry.get("ts", "")
+
+        print(f"  Score: {score:.0f} ({cls})  |  {ts}")
+        print(f"  From:  {sender}")
+        print(f"  Subj:  {subj}")
+
+        while True:
+            try:
+                ans = input("  [i]gnore / [g]lance / [r]ead / [s]kip / [q]uit ? ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                ans = "q"
+            if ans in ("i", "ignore"):
+                labels[ts] = "ignore"
+                reviewed += 1
+                break
+            elif ans in ("g", "glance"):
+                labels[ts] = "glance"
+                reviewed += 1
+                break
+            elif ans in ("r", "read"):
+                labels[ts] = "read"
+                reviewed += 1
+                break
+            elif ans in ("s", "skip"):
+                break
+            elif ans in ("q", "quit"):
+                save_labels(labels)
+                print(f"\nSaved {reviewed} labels.")
+                return
+            else:
+                print("  Type i, g, r, s, or q.")
+        print()
+
+    save_labels(labels)
+    print(f"Saved {reviewed} labels. Total labeled: {len(labels)}/{len(entries)}")
+    if len(labels) >= 5:
+        print("Run --accuracy to see how the model is doing.")
+
+
+BUILD_FILE = CONFIG_DIR / "build.json"
+
+
+def deploy_command():
+    """Reinstall the package from source so Apple Mail uses the latest code."""
+    if not BUILD_FILE.exists():
+        print("No build.json found. Run install.sh first.")
+        return
+
+    build = json.load(BUILD_FILE.open())
+    source_dir = build.get("source_dir", "")
+    if not source_dir or not Path(source_dir).is_dir():
+        print(f"Source directory not found: {source_dir}")
+        print("Re-run install.sh from the source checkout.")
+        return
+
+    import datetime
+    venv_pip = CONFIG_DIR / "venv" / "bin" / "pip"
+    print(f"Reinstalling from {source_dir} ...")
+    result = subprocess.run(
+        [str(venv_pip), "install", source_dir],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"pip install failed:\n{result.stderr}")
+        return
+
+    # Update build timestamp
+    build["built_at"] = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    with BUILD_FILE.open("w") as f:
+        json.dump(build, f, indent=2)
+
+    print(f"Deployed at {build['built_at']}")
+    print("Apple Mail will use the new code on the next incoming message.")
+
+
+def version_command():
+    """Show installed version and build timestamp."""
+    if BUILD_FILE.exists():
+        build = json.load(BUILD_FILE.open())
+        print(f"Source:  {build.get('source_dir', '?')}")
+        print(f"Built:   {build.get('built_at', '?')}")
+    else:
+        print("No build.json found (installed via install.sh?)")
+
+    # Show package version
+    try:
+        from importlib.metadata import version as pkg_version
+        print(f"Package: email-flagger {pkg_version('email-flagger')}")
+    except Exception:
+        print("Package: email-flagger (version unknown)")
+
+
+def accuracy_command():
+    """Report classification accuracy against human labels."""
+    from email_flagger.dataset import load_entries, load_labels, compute_accuracy
+
+    entries = load_entries()
+    labels = load_labels()
+
+    if not labels:
+        print("No labels yet. Run --review first to label some emails.")
+        return
+
+    metrics = compute_accuracy(entries, labels)
+    n = metrics["n"]
+    acc = metrics["accuracy"]
+
+    print(f"Accuracy against your labels: "
+          f"{int(acc * n)}/{n} ({100*acc:.0f}%)\n")
+
+    # Per-bucket breakdown
+    print(f"  {'Bucket':<8} {'Correct':>8} {'Total':>7} {'Accuracy':>10}")
+    print(f"  {'-'*8} {'-'*8} {'-'*7} {'-'*10}")
+    for bucket in ("red", "blue", "none"):
+        b = metrics["buckets"].get(bucket, {"correct": 0, "total": 0})
+        pct = f"{100*b['correct']/b['total']:.0f}%" if b["total"] else "n/a"
+        print(f"  {bucket:<8} {b['correct']:>8} {b['total']:>7} {pct:>10}")
+
+    # Show mismatches
+    misses = metrics["misses"]
+    if misses:
+        print(f"\nMismatches ({len(misses)}):")
+        for m in misses:
+            print(f"  model={m['class']:4s}  you={m['label']:6s}  "
+                  f"score={m['score']:5.0f}  {m['subject'][:60]}")
+    else:
+        print("\nPerfect match!")
+
+    print(f"\nDataset: {len(labels)} labeled / {len(entries)} total")
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="AI-powered email prioritization")
-    parser.add_argument('--setup', action='store_true', 
+    parser.add_argument('--setup', action='store_true',
                        help='Setup and edit configuration')
-    parser.add_argument('--classify', metavar='FILE', 
+    parser.add_argument('--classify', metavar='FILE',
                        help='Classify a single email file')
     parser.add_argument('--test', action='store_true',
                        help='Test classification with a sample email')
     parser.add_argument('--recent', metavar='N', type=int,
                        help='Show the last N classification scores from the log')
-    
+    parser.add_argument('--import-mail', metavar='N', type=int,
+                       help='Import last N emails from Apple Mail into dataset')
+    parser.add_argument('--review', metavar='N', type=int, nargs='?', const=10,
+                       help='Review N recent emails (default 10) and label them')
+    parser.add_argument('--accuracy', action='store_true',
+                       help='Show accuracy against your labels')
+    parser.add_argument('--deploy', action='store_true',
+                       help='Reinstall package from source (after code changes)')
+    parser.add_argument('--version', action='store_true',
+                       help='Show installed version and build timestamp')
+
     args = parser.parse_args()
-    
-    if args.setup:
+
+    import_n = getattr(args, 'import_mail', None)
+
+    if args.deploy:
+        deploy_command()
+    elif args.version:
+        version_command()
+    elif args.setup:
         setup_command()
     elif args.classify:
         classify_file(args.classify)
     elif args.test:
         test_classification()
+    elif import_n is not None:
+        import_mail_command(import_n)
+    elif args.review is not None:
+        review_command(args.review)
+    elif args.accuracy:
+        accuracy_command()
     elif args.recent:
-        from datetime import datetime
         # Ensure log exists
         log_path = CONFIG_DIR / "classifier.log"
         if not log_path.exists():
@@ -292,7 +567,6 @@ def main():
             for line in f:
                 if " ENTRY " in line:
                     try:
-                        import json
                         payload = json.loads(line.split(" ENTRY ",1)[1])
                         entries.append(payload)
                     except Exception:

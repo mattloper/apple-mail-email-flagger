@@ -10,6 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "requests>=2.25.1",
+        "beautifulsoup4>=4.9",
     ],
     entry_points={
         "console_scripts": [

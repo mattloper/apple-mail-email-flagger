@@ -27,12 +27,23 @@ CONFIG_DIR="$HOME/.email-flagger"
 VENV_DIR="$CONFIG_DIR/venv"
 BIN_DIR="$CONFIG_DIR/bin"
 
-# Create virtual environment and install
+# Create virtual environment and install.
+# IMPORTANT: Do NOT use "pip install -e" (editable mode) here.
+# Apple Mail runs scripts in a sandbox that cannot access paths outside
+# ~/.email-flagger.  An editable install symlinks back to the source
+# directory (e.g. ~/Desktop/…) which the sandbox blocks, causing
+# "No module named email_flagger" errors at runtime.
 mkdir -p "$CONFIG_DIR" "$BIN_DIR"
 python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 pip install --upgrade pip >/dev/null 2>&1
 pip install "$SCRIPT_DIR" >/dev/null 2>&1
+
+# Record source directory and build timestamp so `email-flagger --deploy`
+# can reinstall later and `--version` can show what's running.
+cat > "$CONFIG_DIR/build.json" << BUILDJSON
+{"source_dir": "$SCRIPT_DIR", "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+BUILDJSON
 
 # Create wrapper scripts
 cat > "$BIN_DIR/email-flagger" << EOF

@@ -22,4 +22,12 @@ venv/
 *.log
 
 # E-mail test files
-*.eml 
+*.eml
+# Exception: eval test fixtures
+!tests/eval/emails/*.eml
+
+# Experimental prompt iterations (keep only the deployed one in classifier.py)
+tests/eval/prompt_*.txt
+
+# Pycache
+__pycache__/

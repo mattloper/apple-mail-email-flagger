@@ -75,6 +75,10 @@ CLI summary:
 email-flagger --setup                # edit config + rule instructions
 email-flagger --classify FILE.eml    # classify a single message
 email-flagger --test                 # sanity-check your setup
+email-flagger --import-mail 100      # import last N emails from Apple Mail
+email-flagger --review               # label emails as ignore/glance/read
+email-flagger --accuracy             # measure model accuracy vs your labels
+email-flagger --recent 10            # show last N classification scores
 ```
 
 ## Configuration
@@ -103,6 +107,18 @@ Changes are picked up the next time a message is processed.
 3. The AppleScript applies the matching background color in Mail.
 
 Adjust thresholds in `config.json` to change the sensitivity.
+
+## Development
+
+After editing the Python source, you must reinstall the package for Apple Mail to pick up changes:
+
+```bash
+./install.sh          # full reinstall (safe to re-run)
+# — or, just the pip step —
+~/.email-flagger/venv/bin/pip install /path/to/email-flagger
+```
+
+**Do not use `pip install -e` (editable mode).** Apple Mail runs scripts inside a sandbox that cannot access paths outside `~/.email-flagger`. An editable install symlinks back to your source directory, which the sandbox blocks — you'll see `No module named email_flagger` in `~/.email-flagger/email_flagger_log.txt`.
 
 ## Uninstall
 
