@@ -4,7 +4,6 @@ Email Flagger CLI - Main entry point
 """
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -191,7 +190,7 @@ def setup_command():
             continue
     
     if not editor_used:
-        print(f"❌ Failed to open editor")
+        print("❌ Failed to open editor")
         return
     
     print("")
@@ -438,14 +437,14 @@ def deploy_command():
         return
 
     import datetime
-    venv_pip = CONFIG_DIR / "venv" / "bin" / "pip"
     print(f"Reinstalling from {source_dir} ...")
     result = subprocess.run(
-        [str(venv_pip), "install", source_dir],
+        ["uv", "pip", "install", source_dir,
+         "--python", str(CONFIG_DIR / "venv" / "bin" / "python")],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        print(f"pip install failed:\n{result.stderr}")
+        print(f"uv pip install failed:\n{result.stderr}")
         return
 
     # Update build timestamp
