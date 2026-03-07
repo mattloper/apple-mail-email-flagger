@@ -4,7 +4,7 @@ AI-powered email prioritization for Apple Mail. Runs 100 % locally—no cloud ev
 
 ## Features
 
-• Flags emails: **red** background (read now), no color (worth a glance), **gray** background (ignore).
+• Flags emails: **red flag** (read now), no color (worth a glance), **gray** background (ignore).
 • Uses an open-source LLM via [Ollama](https://ollama.ai) (default: `llama3`).
 • Fully configurable priorities, thresholds, and model settings.
 • One-line install & uninstall scripts, no admin rights required.
@@ -37,8 +37,9 @@ This opens your config file in TextEdit and repeats the Mail-rule instructions.
 
 ## Prerequisites
 
-• macOS with Apple Mail  
-• Python 3.7 +  
+• macOS with Apple Mail
+• Python 3.7 +
+• [uv](https://github.com/astral-sh/uv) (`brew install uv`)
 • [Ollama](https://ollama.ai) running locally with a pulled model
 
 ```bash
@@ -118,7 +119,7 @@ Categories are `read`, `glance`, and `ignore`. The parenthetical explains why �
    • builds a prompt using your config  
    • asks Ollama for a "care score" between 0 – 100  
    • maps that score to a category (`read`, `glance`, or `ignore`)
-3. The AppleScript applies the matching background color in Mail (red, none, or gray).
+3. The AppleScript applies the matching visual treatment in Mail (red flag, no color, or gray background).
 
 Adjust thresholds in `config.json` to change the sensitivity.
 
@@ -132,6 +133,8 @@ email-flagger --deploy    # quickest way (reads source path from build.json)
 ```
 
 **Do not use `pip install -e` (editable mode).** Apple Mail runs scripts inside a sandbox that cannot access paths outside `~/.email-flagger`. An editable install symlinks back to your source directory, which the sandbox blocks — you'll see `No module named email_flagger` in `~/.email-flagger/email_flagger_log.txt`.
+
+**Always use `uv pip`, never raw `pip`.** The venv's bundled pip can cache stale builds and silently install old code. `uv` builds fresh every time.
 
 ## Uninstall
 
