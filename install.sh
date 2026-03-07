@@ -21,6 +21,12 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
+# Check for uv (required — venv pip caches stale builds)
+if ! command -v uv >/dev/null 2>&1; then
+    echo "ERROR: uv is required. Install with: brew install uv"
+    exit 1
+fi
+
 # Set up directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="$HOME/.email-flagger"
@@ -35,9 +41,11 @@ BIN_DIR="$CONFIG_DIR/bin"
 # "No module named email_flagger" errors at runtime.
 mkdir -p "$CONFIG_DIR" "$BIN_DIR"
 python3 -m venv "$VENV_DIR"
-source "$VENV_DIR/bin/activate"
-pip install --upgrade pip >/dev/null 2>&1
-pip install "$SCRIPT_DIR" >/dev/null 2>&1
+
+# Clean stale build artifacts that can poison pip/uv installs
+rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/dist" "$SCRIPT_DIR"/*.egg-info
+
+uv pip install "$SCRIPT_DIR" --python "$VENV_DIR/bin/python" >/dev/null 2>&1
 
 # Record source directory and build timestamp so `email-flagger --deploy`
 # can reinstall later and `--version` can show what's running.
@@ -98,14 +106,17 @@ using terms from application "Mail"
 					-- Log the result
 					my log_to_file("Python script result: [" & resultClassification & "]", logFile)
 					
-					-- Set the flag/color based on the Python script's output.
+					-- Set the color/flag based on the Python script's output.
 					if resultClassification is "read" then
-						set background color of eachMessage to red
-					else if resultClassification is "ignore" then
-						set background color of eachMessage to gray
-					else
-						-- "glance" or any other result: no background color.
+						-- White text + red flag so it stands out
 						set background color of eachMessage to none
+						set flag index of eachMessage to 0
+					else if resultClassification is "glance" then
+						-- Regular (white/no color), no flag
+						set background color of eachMessage to none
+					else
+						-- "ignore" / anything else -> grey
+						set background color of eachMessage to gray
 					end if
 					
 				on error errMsg number errNum
