@@ -19,7 +19,6 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import re as _re
 
 import requests
 
