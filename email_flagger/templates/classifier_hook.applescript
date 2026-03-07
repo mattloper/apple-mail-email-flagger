@@ -7,7 +7,7 @@ using terms from application "Mail"
 		-- Ensure log directory exists and define log file path in ~/.email-flagger
 		do shell script "mkdir -p $HOME/.email-flagger"
 		set logFile to POSIX file ((POSIX path of (path to home folder) & ".email-flagger/email_flagger_log.txt"))
-		
+
 		tell application "Mail"
 			repeat with eachMessage in theMessages
 				try
@@ -15,32 +15,35 @@ using terms from application "Mail"
 					set tmpPath to "/tmp/email_" & (random number from 10000 to 99999) & "_" & (do shell script "date +%s") & ".eml"
 					set msgSource to source of eachMessage
 					do shell script "echo " & quoted form of msgSource & " > " & quoted form of tmpPath
-					
+
 					-- Use the installed classifier with full path
 					set fullCommand to "$HOME/.email-flagger/bin/email-flagger-classify " & quoted form of tmpPath
-					
+
 					-- Log the command we're about to run
 					my log_to_file("Running command: " & fullCommand, logFile)
-					
+
 					-- Call the Python script and get the result
 					set resultClassification to do shell script fullCommand
-					
+
 					-- Clean up temp file
 					do shell script "rm -f " & quoted form of tmpPath
-					
+
 					-- Log the result
 					my log_to_file("Python script result: [" & resultClassification & "]", logFile)
-					
-					-- Set the flag/color based on the Python script's output.
-					if resultClassification is "red" then
-						set background color of eachMessage to red
-					else if resultClassification is "blue" then
-						set background color of eachMessage to blue
-					else
-						-- For "none" or any other result, clear the background color.
+
+					-- Set the color/flag based on the Python script's output.
+					if resultClassification is "read" then
+						-- White text + red flag so it stands out
 						set background color of eachMessage to none
+						set flag index of eachMessage to 0
+					else if resultClassification is "glance" then
+						-- Regular (white/no color), no flag
+						set background color of eachMessage to none
+					else
+						-- "ignore" / anything else -> grey
+						set background color of eachMessage to gray
 					end if
-					
+
 				on error errMsg number errNum
 					-- If anything above fails, log the error.
 					my log_to_file("AppleScript Error: " & errNum & ": " & errMsg, logFile)
